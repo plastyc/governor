@@ -4,6 +4,7 @@ import psycopg2
 import re
 import sys
 import time
+from OpenSSL import crypto
 
 is_py3 = sys.hexversion >= 0x03000000
 
@@ -89,6 +90,7 @@ class Postgresql:
 
     def initialize(self):
         if os.system(self._pg_ctl + ' initdb -o --encoding=UTF8') == 0:
+            self.generate_dummy_certificate()
             self.write_pg_hba()
 
             return True
@@ -145,6 +147,32 @@ class Postgresql:
         for setting, value in self.config['parameters'].items():
             options += " --{}='{}'".format(setting, value)
         return options
+
+    def generate_dummy_certificate(self):
+        key = crypto.PKey()
+        key.generate_key(crypto.TYPE_RSA, 4096)
+
+        cert = crypto.X509()
+        cert.get_subject().C   = 'EU'
+        cert.get_subject().ST  = 'Cirrocumulus'
+        cert.get_subject().L   = 'Sky'
+        cert.get_subject().O   = 'Zalando'
+        cert.get_subject().OU  = 'ACID'
+        cert.get_subject().CN  = 'Spilo PostgreSQL Appliance Dummy'
+        cert.set_serial_number(1000)
+        cert.gmtime_adj_notBefore(0)
+        cert.gmtime_adj_notAfter(10*365*24*60*60)
+
+        cert.set_issuer( cert.get_subject() )
+        cert.set_pubkey(key)
+        cert.sign(key, 'sha512')
+
+        with open(self.data_dir+'/server.crt', 'w') as pub:
+            pub.write( crypto.dump_certificate(crypto.FILETYPE_PEM, cert) )
+
+        with open(self.data_dir+'/server.key', 'w') as private:
+            private.write( crypto.dump_privatekey(crypto.FILETYPE_PEM, key) )
+            os.fchmod(private.fileno(), 0o600)
 
     def is_healthy(self):
         if not self.is_running():
