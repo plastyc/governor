@@ -16,6 +16,8 @@ from helpers.aws import AWSConnection
 class Governor:
 
     def __init__(self, config):
+        assert config["etcd"]["ttl"] > 2 * config["loop_wait"]
+
         self.nap_time = config['loop_wait']
         self.etcd = Etcd(config['etcd'])
         self.aws = AWSConnection(config)
@@ -30,6 +32,7 @@ class Governor:
         return self.etcd.touch_member(self.postgresql.name, connection_string, ttl)
 
     def initialize(self):
+        # FIXME: isn't there a better way testing if etcd is writable?
         # wait for etcd to be available
         while not self.touch_member():
             logging.info('waiting on etcd')
@@ -42,9 +45,8 @@ class Governor:
                 self.postgresql.initialize()
                 self.etcd.take_leader(self.postgresql.name)
                 self.postgresql.start()
-                self.postgresql.create_replication_user()
-                self.postgresql.create_connection_users()
             else:
+                # FIXME: touch_member?
                 while True:
                     leader = self.etcd.current_leader()
                     if leader and self.postgresql.sync_from_leader(leader):

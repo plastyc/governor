@@ -1,0 +1,46 @@
+loop_wait: 3
+restapi:
+  listen: ":8080"
+  connect_address: "{COREOS_PRIVATE_IPV4}:5480"
+etcd:
+  scope: pgsql
+  ttl: 9
+  host: 172.17.42.1:2379
+postgresql:
+  name: "{HOSTNAME}"
+  listen: "*:5432"
+  connect_address: "{COREOS_PRIVATE_IPV4}:5434"
+  data_dir: /data
+  pgpass_file: /var/lib/pgsql/.pgpass
+  maximum_lag_on_failover: 1048576 # 1 megabyte in bytes
+  replication:
+    username: replicator
+    password: replicatorpass
+    network: 10.1.0.0/16
+  superuser:
+    password: postgrespass
+  admin:
+    username: admin
+    password: adminpass
+  #recovery_conf:
+    #restore_command: cp ../wal_archive/%f %p
+  #wal_e:
+    #env_dir: /home/postgres/etc/wal-e.d/env
+    #threshold_megabytes: 10240
+    #threshold_backup_size_percentage: 30
+  parameters:
+    shared_buffers: 8GB
+    work_mem: 64MB
+    archive_mode: off
+    #archive_command: mkdir -p ../wal_archive && cp %p ../wal_archive/%f
+    #archive_timeout: 1800s
+    wal_level: hot_standby
+    max_wal_senders: 8
+    wal_keep_segments: 32
+    max_replication_slots: 5
+    synchronous_standby_names: "*"
+    hot_standby: on
+    log_timezone: UTC
+    timezone: UTC
+  pg_hba:
+    - host all all 10.1.0.0/16 md5

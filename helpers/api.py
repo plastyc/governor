@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import psycopg2
 import sys
 
@@ -57,7 +58,8 @@ class RestApiHandler(BaseHTTPRequestHandler):
 class RestApiServer(ThreadingMixIn, HTTPServer, Thread):
 
     def __init__(self, governor, config):
-        self.connection_string = 'http://{}/governor'.format(config.get('connect_address', None) or config['listen'])
+        connect_address = (config.get('connect_address', None) or config['listen']).format(**os.environ)
+        self.connection_string = 'http://{}/governor'.format(connect_address)
         host, port = config['listen'].split(':')
         HTTPServer.__init__(self, (host, int(port)), RestApiHandler)
         Thread.__init__(self, target=self.serve_forever)

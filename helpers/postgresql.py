@@ -36,7 +36,7 @@ class Postgresql:
 
     def __init__(self, config, on_change_callback=None):
         self.config = config
-        self.name = config['name']
+        self.name = config['name'].format(**os.environ)
         self.listen_addresses, self.port = config['listen'].split(':')
         self.data_dir = config['data_dir']
         self.replication = config['replication']
@@ -57,7 +57,7 @@ class Postgresql:
                 format(self.wal_e.get('env_dir', '/home/postgres/etc/wal-e.d/env'))
 
         self.local_address = self.get_local_address()
-        connect_address = config.get('connect_address', None) or self.local_address
+        connect_address = (config.get('connect_address', None) or self.local_address).format(**os.environ)
         self.connection_string = 'postgres://{username}:{password}@{connect_address}/postgres'.format(
             connect_address=connect_address, **self.replication)
 
@@ -118,7 +118,14 @@ class Postgresql:
 
     def initialize(self):
         ret = subprocess.call(self._pg_ctl + ['initdb', '-o', '--encoding=UTF8']) == 0
-        ret and self.write_pg_hba()
+        if ret:
+            # start Postgres without options to setup replication user indepedent of other system settings
+            ret = subprocess.call(self._pg_ctl + ['start']) == 0
+            ret and self.create_replication_user()
+            ret and self.create_connection_users()
+            ret = ret and (subprocess.call(self._pg_ctl + ['stop', '-m', 'fast']) == 0)
+			# write pg_hba.conf
+            ret and self.write_pg_hba()
         return ret
 
     def delete_trigger_file(self):
@@ -127,7 +134,7 @@ class Postgresql:
     def sync_from_leader(self, leader):
         r = parseurl(leader.conn_url)
 
-        pgpass = 'pgpass'
+        pgpass = self.config.get('pgpass_file', 'pgpass')
         with open(pgpass, 'w') as f:
             os.fchmod(f.fileno(), 0o600)
             f.write('{host}:{port}:*:{user}:{password}\n'.format(**r))
